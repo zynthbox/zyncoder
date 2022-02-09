@@ -28,7 +28,7 @@
 #include <lo/lo.h>
 
 #include "zynmidirouter.h"
-#include "zynaptik.h"
+//#include "zynaptik.h"
 #include "zyntof.h"
 
 //-----------------------------------------------------------------------------
@@ -41,35 +41,42 @@ int end_zynlib();
 int init_zyncoder();
 int end_zyncoder();
 
+#ifndef MCP23008_ENCODERS
 struct wiringPiNodeStruct * init_mcp23017(int base_pin, uint8_t i2c_address, uint8_t inta_pin, uint8_t intb_pin, void (*isrs[2]));
 
 // generic auxiliar ISR routine for zyncoders
 void zyncoder_mcp23017_ISR(struct wiringPiNodeStruct *wpns, uint16_t base_pin, uint8_t bank);
+#endif
 
 //-----------------------------------------------------------------------------
 // GPIO Switches
 //-----------------------------------------------------------------------------
 
-#define MAX_NUM_ZYNSWITCHES 24
+#define MAX_NUM_ZYNSWITCHES 36
 
-struct zynswitch_st {
+typedef struct zynswitch_st {
 	uint8_t enabled;
 	uint8_t pin;
+	uint8_t push;
 	volatile unsigned long tsus;
 	volatile unsigned int dtus;
-	// note that this status is like the pin_[ab]_last_state for the 
+	// note that this status is like the pin_[ab]_last_state for the
 	// zyncoders
 	volatile uint8_t status;
 
 	struct midi_event_st midi_event;
 
-};
+} zynswitch_t;
 struct zynswitch_st zynswitches[MAX_NUM_ZYNSWITCHES];
 
 struct zynswitch_st *setup_zynswitch(uint8_t i, uint8_t pin); 
 int setup_zynswitch_midi(uint8_t i, uint8_t midi_evt, uint8_t midi_chan, uint8_t midi_num);
 unsigned int get_zynswitch(uint8_t i, unsigned int long_dtus);
 unsigned int get_zynswitch_dtus(uint8_t i, unsigned int long_dtus);
+void reset_zynswitches();
+void reset_zyncoders();
+int get_num_zynswitches();
+int get_last_zynswitch_index();
 
 //-----------------------------------------------------------------------------
 // Rotary Encoders
@@ -80,7 +87,7 @@ unsigned int get_zynswitch_dtus(uint8_t i, unsigned int long_dtus);
 // Number of ticks per retent in rotary encoders
 #define ZYNCODER_TICKS_PER_RETENT 4
 
-struct zyncoder_st {
+typedef struct zyncoder_st {
 	uint8_t enabled;
 	uint8_t pin_a;
 	uint8_t pin_b;
@@ -88,6 +95,9 @@ struct zyncoder_st {
 	volatile uint8_t pin_b_last_state;
 	uint8_t midi_chan;
 	uint8_t midi_ctrl;
+	uint8_t value_flag;
+	uint8_t inv;
+	int32_t min_value;
 	unsigned int osc_port;
 	lo_address osc_lo_addr;
 	char osc_path[512];
@@ -98,12 +108,15 @@ struct zyncoder_st {
 	volatile unsigned int last_encoded;
 	volatile unsigned long tsus;
 	unsigned int dtus[ZYNCODER_TICKS_PER_RETENT];
-};
+	int8_t zpot_i;
+} zyncoder_t;
 struct zyncoder_st zyncoders[MAX_NUM_ZYNCODERS];
 
 void midi_event_zyncoders(uint8_t midi_chan, uint8_t midi_ctrl, uint8_t val);
 
 struct zyncoder_st *setup_zyncoder(uint8_t i, uint8_t pin_a, uint8_t pin_b, uint8_t midi_chan, uint8_t midi_ctrl, char *osc_path, unsigned int value, unsigned int max_value, unsigned int step); 
+int setup_rangescale_zyncoder(uint8_t i, int32_t min_value, int32_t max_value, int32_t value, int32_t step);
 unsigned int get_value_zyncoder(uint8_t i);
+uint8_t get_value_flag_zyncoder(uint8_t i);
 void set_value_zyncoder(uint8_t i, unsigned int v, int send);
 

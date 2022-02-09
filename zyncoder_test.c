@@ -60,29 +60,43 @@ unsigned int zynswitch_pin[NUM_SWITCHES]={107,23,106,2};
 int main() {
 	int i;
 
-	printf("INITIALIZING ZYNCODER LIBRARY!\n");
-	init_zynlib();
+	printf("Starting ZynCore...\n");
+	init_zyncontrol();
+	init_zynmidirouter();
 
-	printf("SETTING UP ZYNSWITCHES!\n");
-	for (i=0;i<NUM_SWITCHES;i++) {
-		setup_zynswitch(i,zynswitch_pin[i]);
+	#ifdef DEBUG
+	if (zynpots[0].type==ZYNPOT_RV112) {
+		fprintf(stdout, "Range 25 = %d\n", RV112_ADS1115_RANGE_25);
+		fprintf(stdout, "Range 50 = %d\n", RV112_ADS1115_RANGE_50);
+		fprintf(stdout, "Range 75 = %d\n", RV112_ADS1115_RANGE_75);
+		fprintf(stdout, "Range 100 = %d\n", RV112_ADS1115_RANGE_100);
 	}
+	#endif
 
-	printf("SETTING UP ZYNCODERS!\n");
-	for (i=0;i<4;i++) {
-		setup_zyncoder(i,zyncoder_pin_a[i],zyncoder_pin_b[i],0,70+i,NULL,64,127,1);
+	int last_zynswitch_index = get_last_zynswitch_index();
+	int num_zynswitches = get_num_zynswitches();
+	int num_zynpots = get_num_zynpots();
+
+	//Configure zynpots
+	for (i=0; i<num_zynpots; i++) {
+		setup_rangescale_zynpot(i, 0, 100, 50, 0);
 	}
+	//setup_rangescale_zynpot(0, 0, 100, 50, 1);
 
-	printf("TESTING ...\n");
+	printf("Testing switches & rotaries...\n");
 	while(1) {
-		for (i=0;i<NUM_SWITCHES;i++) {
-			printf("SW%d = %d\n", i, get_zynswitch(i,2000000));
+		i=0;
+		while (i <= last_zynswitch_index) {
+			int dtus = get_zynswitch(i, 2000000);
+			if (dtus>0) fprintf(stdout, "SW-%d = %d\n", i, dtus);
+			i++;
 		}
-		for (i=0;i<4;i++) {
-			printf("ZC%d = %d\n", i, get_value_zyncoder(i));
+		for (i=0;i<num_zynpots;i++) {
+			if (get_value_flag_zynpot(i)) {
+				printf("PT-%d = %d\n", i, get_value_zynpot(i));
+			}
 		}
-		printf("-----------------------\n");
-		usleep(500000);
+		usleep(5000);
 	}
 
 	return 0;
