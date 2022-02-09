@@ -7,7 +7,7 @@ pushd $DIR
 		mkdir build
 	fi
 	pushd build
-		cmake ..
+		ZYNTHIAN_WIRING_LAYOUT="Z2_V2" cmake ..
 		make
 	popd
 popd
