@@ -478,7 +478,7 @@ int setup_zynswitch_midi(uint8_t i, uint8_t midi_evt, uint8_t midi_chan, uint8_t
 }
 
 unsigned int get_zynswitch_dtus(uint8_t i, unsigned int long_dtus) {
-	if (i >= MAX_NUM_ZYNSWITCHES) return 0;
+	if (i >= MAX_NUM_ZYNSWITCHES) return -1;
 
 	unsigned int dtus=zynswitches[i].dtus;
 	if (dtus>0) {
@@ -492,9 +492,11 @@ unsigned int get_zynswitch_dtus(uint8_t i, unsigned int long_dtus) {
 		if (dtus>long_dtus) {
 			zynswitches[i].tsus=0;
 			return dtus;
+		} else {
+			return 0;
 		}
 	}
-	return 0;
+	return -1;
 }
 
 unsigned int get_zynswitch(uint8_t i, unsigned int long_dtus) {
