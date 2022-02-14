@@ -7,4 +7,9 @@
 	dh $@
 
 override_dh_auto_configure:
+	pushd /tmp
+		git clone https://github.com/zynthbox/WiringPi
+		cd WiringPi
+		./build
+	popd
 	ZYNTHIAN_WIRING_LAYOUT="Z2_V2" dh_auto_configure 
