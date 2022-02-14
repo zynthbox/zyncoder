@@ -2,7 +2,7 @@ Source: zyncoder
 Section: misc
 Priority: optional
 Maintainer: Anupam Basak <anupam.basak27@gmail.com>
-Build-Depends: debhelper (>= 11), cmake (>= 3.13), extra-cmake-modules (>= 5.54.0), liblo-dev, libjack-jackd2-dev, pkg-config
+Build-Depends: debhelper (>= 11), cmake (>= 3.13), extra-cmake-modules (>= 5.54.0), liblo-dev, libjack-jackd2-dev, wiringpi, pkg-config
 Standards-Version: 4.1.3
 Homepage: https://github.com/zynthbox/zyncoder
 
