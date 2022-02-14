@@ -2,7 +2,9 @@
 # See debhelper(7) (uncomment to enable)
 # output every command that modifies files on the build system.
 #export DH_VERBOSE = 1
-export ZYNTHIAN_WIRING_LAYOUT="Z2_V2"
 
 %:
 	dh $@
+
+override_dh_auto_configure:
+	ZYNTHIAN_WIRING_LAYOUT="Z2_V2" dh_auto_configure 
