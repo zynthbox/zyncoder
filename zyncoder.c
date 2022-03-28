@@ -507,7 +507,7 @@ unsigned int get_zynswitch_dtus(uint8_t i, unsigned int long_dtus) {
 			return 0;
 		}*/
 
-		return 0
+		return 0;
 	}
 	return -1;
 }
