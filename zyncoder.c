@@ -489,12 +489,25 @@ unsigned int get_zynswitch_dtus(uint8_t i, unsigned int long_dtus) {
 		struct timespec ts;
 		clock_gettime(CLOCK_MONOTONIC, &ts);
 		dtus=ts.tv_sec*1000000 + ts.tv_nsec/1000 - zynswitches[i].tsus;
-		if (dtus>long_dtus) {
+
+		/**
+		 * Disable long events
+		 *
+		 * Long events caused the keypress to emit release event after a certain time
+		 * which conflicts with zynthbox button usage where we need have the pressed event
+		 * as long as the button is pressed and emit release event only when button is released
+		 *
+		 * Always return 0 instead of the check to determine if the press event exceeded long press
+		 * time and hence disable all long events as zynthbox doesnt need any long press event
+		 */
+		/*if (dtus>long_dtus) {
 			zynswitches[i].tsus=0;
 			return dtus;
 		} else {
 			return 0;
-		}
+		}*/
+
+		return 0
 	}
 	return -1;
 }
