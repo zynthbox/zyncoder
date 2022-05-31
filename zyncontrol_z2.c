@@ -125,7 +125,7 @@ void init_zynpots() {
 	setup_rv112(1, RV112_ADS1115_BASE_PIN_1, 0);
 	setup_rv112(2, RV112_ADS1115_BASE_PIN_2, 0);
 	init_poll_rv112();
-	setup_zyncoder(0, MCP23017_2_BASE_PIN + 14, MCP23017_2_BASE_PIN + 15, 0, 0, NULL, 64, 128, 1);
+	setup_stepped_zyncoder(0, MCP23017_2_BASE_PIN + 14, MCP23017_2_BASE_PIN + 15);
 
 	int i;
 	for (i=0;i<3;i++) {

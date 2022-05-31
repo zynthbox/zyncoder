@@ -31,6 +31,12 @@
 //#include "zynaptik.h"
 #include "zyntof.h"
 
+#if defined(HAVE_WIRINGPI_LIB)
+	#include <wiringPi.h>
+	#include "zynmcp23017.h"
+	#include "zynmcp23008.h"
+#endif
+
 //-----------------------------------------------------------------------------
 // Zyncoder Library Initialization
 //-----------------------------------------------------------------------------
@@ -114,6 +120,8 @@ struct zyncoder_st zyncoders[MAX_NUM_ZYNCODERS];
 
 void midi_event_zyncoders(uint8_t midi_chan, uint8_t midi_ctrl, uint8_t val);
 
+
+int setup_stepped_zyncoder(uint8_t i, uint16_t pin_a, uint16_t pin_b);
 struct zyncoder_st *setup_zyncoder(uint8_t i, uint8_t pin_a, uint8_t pin_b, uint8_t midi_chan, uint8_t midi_ctrl, char *osc_path, unsigned int value, unsigned int max_value, unsigned int step); 
 int setup_rangescale_zyncoder(uint8_t i, int32_t min_value, int32_t max_value, int32_t value, int32_t step);
 unsigned int get_value_zyncoder(uint8_t i);

@@ -83,6 +83,7 @@
 
 void zynswitch_rbpi_ISR(uint8_t i);
 void (*zynswitch_rbpi_ISRs[]);
+void (*zyncoder_rbpi_ISRs[]);
 
 int init_zynlib() {
 	if (!init_zyncoder()) return 0;
@@ -113,10 +114,10 @@ int end_zynlib() {
 //-----------------------------------------------------------------------------
 
 //Switch Polling interval
-int poll_zynswitches_us=10000;
+//int poll_zynswitches_us=10000;
 
 //Switches Polling Thread (should be avoided!)
-pthread_t init_poll_zynswitches();
+//pthread_t init_poll_zynswitches();
 
 #ifdef MCP23017_ENCODERS
 // wiringpi node structure for direct access to the mcp23017
@@ -407,7 +408,7 @@ void update_expanded_zynswitches() {
 		} else zynswitch->tsus=tsus;
 	}
 }
-
+/*
 void * poll_zynswitches(void *arg) {
 	while (1) {
 		update_expanded_zynswitches();
@@ -427,7 +428,7 @@ pthread_t init_poll_zynswitches() {
 		return tid;
 	}
 }
-
+*/
 //-----------------------------------------------------------------------------
 
 struct zynswitch_st *setup_zynswitch(uint8_t i, uint8_t pin) {
@@ -657,6 +658,92 @@ void (*update_zyncoder_funcs[8])={
 #endif
 
 //-----------------------------------------------------------------------------
+
+int setup_stepped_zyncoder(uint8_t i, uint16_t pin_a, uint16_t pin_b) {
+	if (i>=MAX_NUM_ZYNCODERS) {
+		printf("ZynCore->setup_zyncoder(%d, ...): Invalid index!\n", i);
+		return 0;
+	}
+	zyncoder_t *zcdr = zyncoders + i;
+
+	//setup_rangescale_zyncoder(i,0,127,64,0);
+	zcdr->enabled = 0;
+	zcdr->inv = 0;
+	zcdr->step = 1;
+	zcdr->value = 0;
+	zcdr->subvalue = 0;
+	zcdr->last_encoded = 0;
+	zcdr->tsus = 0;
+
+	if (pin_a!=pin_b) {
+		// RBPi GPIO pins
+		if (pin_a<100 && pin_b<100) {
+			pinMode(pin_a, INPUT);
+			pinMode(pin_b, INPUT);
+			pullUpDnControl(pin_a, PUD_UP);
+			pullUpDnControl(pin_b, PUD_UP);
+			zcdr->pin_a = pin_a;
+			zcdr->pin_b = pin_b;
+			zcdr->enabled = 1;
+			wiringPiISR(pin_a,INT_EDGE_BOTH, zyncoder_rbpi_ISRs[i]);
+			wiringPiISR(pin_b,INT_EDGE_BOTH, zyncoder_rbpi_ISRs[i]);
+			zyncoder_rbpi_ISR(i);
+			return 1;
+		}
+		// MCP23017 pins
+		else if (pin_a>=100 && pin_b>=100) {
+			#if defined(MCP23017_ENCODERS)
+				uint8_t j = pin2index_zynmcp23017(pin_a);
+				uint8_t k = pin2index_zynmcp23017(pin_b);
+				if (j>=0 && k>=0 && j==k) {
+					uint8_t bit_a = pin_a - zynmcp23017s[j].base_pin;
+					uint8_t bit_b = pin_b - zynmcp23017s[k].base_pin;
+					if (bit_a<16 && bit_b<16) {
+						uint8_t bank_a, bank_b;
+						if (bit_a<8) bank_a=0;
+						else bank_a=1;
+						if (bit_b<8) bank_b=0;
+						else bank_b=1;
+						if (bank_a == bank_b) {
+							pinMode(pin_a, INPUT);
+							pinMode(pin_b, INPUT);
+							pullUpDnControl(pin_a, PUD_UP);
+							pullUpDnControl(pin_b, PUD_UP);
+							zcdr->pin_a = pin_a;
+							zcdr->pin_b = pin_b;
+							zcdr->enabled = 1;
+							setup_pin_action_zynmcp23017(pin_a, ZYNCODER_PIN_ACTION, i);
+							setup_pin_action_zynmcp23017(pin_b, ZYNCODER_PIN_ACTION, i);
+							zyncoder_update_zynmcp23017(i);
+							return 1;
+						}
+						else {
+							printf("ZynCore->setup_zyncoder(%d, %d, %d): Can't configure zyncoder with pins on different banks!\n", i, pin_a, pin_b);
+							return 0;
+						}
+					}
+					else {
+						printf("ZynCore->setup_zyncoder(%d, %d, %d): Pin numbers out of range!\n", i, pin_a, pin_b);
+						return 0;
+					}
+				}
+				else {
+					printf("ZynCore->setup_zyncoder(%d, %d, %d): Can't configure zyncoder with pins on different MCP23017!\n", i, pin_a, pin_b);
+					return 0;
+				}
+			#endif
+		}
+		else {
+			printf("ZynCore->setup_zyncoder(%d, %d, %d): Can't configure zyncoder with mixed pins (RBPi & MCP230XX)!\n", i, pin_a, pin_b);
+			return 0;
+		}
+	}
+	else {
+		printf("ZynCore->setup_zyncoder(%d, %d, %d): Can't configure zyncoder on a single pin!\n", i, pin_a, pin_b);
+		return 0;
+	}
+	return 0;
+}
 
 struct zyncoder_st *setup_zyncoder(uint8_t i, uint8_t pin_a, uint8_t pin_b, uint8_t midi_chan, uint8_t midi_ctrl, char *osc_path, unsigned int value, unsigned int max_value, unsigned int step) {
 	if (i > MAX_NUM_ZYNCODERS) {
