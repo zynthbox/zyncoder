@@ -119,6 +119,7 @@ endif()
 # Temporarily disable test for Z2_V3
  add_executable(zyncoder_test zyncoder_test.c)
  target_link_libraries(zyncoder_test zyncoder)
+ install(TARGETS zyncoder_test DESTINATION bin)
 
 install(TARGETS zyncoder LIBRARY DESTINATION lib)
 #install(TARGETS zynmidirouter LIBRARY DESTINATION lib)
