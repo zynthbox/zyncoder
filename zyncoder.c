@@ -321,40 +321,40 @@ int get_last_zynswitch_index() {
 	return li;
 }
 
-#ifdef MCP23008_ENCODERS
-//Update ISR switches (native GPIO)
-void update_zynswitch(uint8_t i) {
-#else
-// Update the mcp23017 based switches from ISR routine
 void update_zynswitch(uint8_t i, uint8_t status) {
-#endif
-	if (i>=MAX_NUM_ZYNSWITCHES) return;
-	struct zynswitch_st *zynswitch = zynswitches + i;
-	if (zynswitch->enabled==0) return;
+	zynswitch_t *zsw = zynswitches + i;
 
-#ifdef MCP23008_ENCODERS
-	uint8_t status=digitalRead(zynswitch->pin);
-#endif
-	if (status==zynswitch->status) return;
-	zynswitch->status=status;
-
-	send_zynswitch_midi(zynswitch, status);
+	if (status==zsw->status) return;
+	zsw->status=status;
 
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	unsigned long int tsus=ts.tv_sec*1000000 + ts.tv_nsec/1000;
 
-	//printf("SWITCH ISR %d => STATUS=%d (%lu)\n",i,zynswitch->status,tsus);
-	if (zynswitch->status==1) {
-		if (zynswitch->tsus>0) {
-			unsigned int dtus=tsus-zynswitch->tsus;
-			zynswitch->tsus=0;
-			//Ignore spurious ticks
-			if (dtus<1000) return;
+	//printf("SWITCH ISR %d => STATUS=%d (%lu)\n",i,status,tsus);
+
+	//If pushed ...
+	if (zsw->tsus>0) {
+		unsigned int dtus;
+		dtus=tsus-zsw->tsus;
+
+		//SW debouncing => Ignore spurious clicks
+		if (dtus<1000) return;
+
+		//Release
+		if (zsw->status==1) {
+			zsw->tsus=0;
 			//printf("Debounced Switch %d\n",i);
-			zynswitch->dtus=dtus;
+			zsw->dtus=dtus;
 		}
-	} else zynswitch->tsus=tsus;
+	}
+	//Push
+	else if (zsw->status==0) {
+		zsw->push=1;
+		zsw->tsus=tsus;		// Save push timestamp
+	}
+	//Send MIDI
+	send_zynswitch_midi(zsw, status);
 }
 
 #ifdef MCP23008_ENCODERS
@@ -451,12 +451,36 @@ struct zynswitch_st *setup_zynswitch(uint8_t i, uint8_t pin) {
 
 		// RBPi GPIO pin
 		if (pin<100) {
+			zynswitch->enabled = 1;
+			zynswitch->pin = pin;
 			wiringPiISR(pin,INT_EDGE_BOTH, zynswitch_rbpi_ISRs[i]);
 			zynswitch_rbpi_ISR(i);
 		}
 		// MCP23017 pin
 		else if (pin>=100) {
-			zynswitch_mcp23017_update(i);
+			#if defined(MCP23008_ENCODERS)
+				zynswitch->pin = pin;
+				zynswitch->enabled = 1;
+			#elif defined(MCP23017_ENCODERS)
+				uint8_t j = pin2index_zynmcp23017(pin);
+				if (j>=0) {
+					uint8_t bit = pin - zynmcp23017s[j].base_pin;
+					if (bit<16) {
+						zynswitch->pin = pin;
+						zynswitch->enabled = 1;
+						setup_pin_action_zynmcp23017(pin, ZYNSWITCH_PIN_ACTION, i);
+						zynswitch_update_zynmcp23017(i);
+					}
+					else {
+						printf("ZynCore->setup_zynswitch(%d, %d): Pin out of range!\n",i, pin);
+						return 0;
+					}
+				}
+				else {
+					printf("ZynCore->setup_zynswitch(%d, %d): Pin is not a MPC23017 pin!\n",i, pin);
+					return 0;
+				}
+			#endif
 		}
 	}
 

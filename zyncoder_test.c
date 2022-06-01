@@ -64,7 +64,7 @@ int main() {
 		i=0;
 		while (i <= last_zynswitch_index) {
 			int dtus = get_zynswitch(i, 2000000);
-			if (dtus>=0) fprintf(stdout, "SW-%d = %d\n", i, dtus);
+			if (dtus>0) fprintf(stdout, "SW-%d = %d\n", i, dtus);
 			i++;
 		}
 		for (i=0;i<num_zynpots;i++) {
