@@ -1,13 +1,13 @@
 /*
  * ******************************************************************
  * ZYNTHIAN PROJECT: Zyncontrol Library for Zynthian Kits V1-V4
- *
+ * 
  * Initialize & configure control hardware for Zynthian Kits V1-V4
- *
+ * 
  * Copyright (C) 2015-2021 Fernando Moyano <jofemodo@zynthian.org>
  *
  * ******************************************************************
- *
+ * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
  * published by the Free Software Foundation; either version 2 of
@@ -19,7 +19,7 @@
  * GNU General Public License for more details.
  *
  * For a full copy of the GNU General Public License see the LICENSE.txt file.
- *
+ * 
  * ******************************************************************
  */
 
@@ -111,7 +111,6 @@ void init_zynswitches() {
 
 #define RV112_ADS1115_GAIN ADS1115_GAIN_VREF_4_096
 #define RV112_ADS1115_RATE ADS1115_RATE_475SPS
-//#define RV112_ADS1115_RATE ADS1115_RATE_860SPS
 
 void init_zynpots() {
 	reset_zyncoders();
