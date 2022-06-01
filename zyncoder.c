@@ -85,6 +85,8 @@ void zynswitch_rbpi_ISR(uint8_t i);
 void (*zynswitch_rbpi_ISRs[]);
 void (*zyncoder_rbpi_ISRs[]);
 
+extern void (*zynpot_cb)(int8_t, int32_t);
+
 int init_zynlib() {
 	if (!init_zyncoder()) return 0;
 	if (!init_zynmidirouter()) return 0;
@@ -583,81 +585,105 @@ void send_zyncoder(uint8_t i) {
 	}
 }
 
-#ifdef MCP23008_ENCODERS
-void update_zyncoder(uint8_t i) {
-#else
-void update_zyncoder(uint8_t i, uint8_t MSB, uint8_t LSB) {
-#endif
-	if (i>=MAX_NUM_ZYNCODERS) return;
-	struct zyncoder_st *zyncoder = zyncoders + i;
-	if (zyncoder->enabled==0) return;
+void update_zyncoder(uint8_t i, uint8_t msb, uint8_t lsb) {
+	zyncoder_t *zcdr = zyncoders + i;
 
-#ifdef MCP23008_ENCODERS
-	uint8_t MSB = digitalRead(zyncoder->pin_a);
-	uint8_t LSB = digitalRead(zyncoder->pin_b);
-#endif
-	uint8_t encoded = (MSB << 1) | LSB;
-	uint8_t sum = (zyncoder->last_encoded << 2) | encoded;
-	uint8_t up=(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011);
-	uint8_t down=0;
-	if (!up) down=(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000);
-#ifdef DEBUG
-	printf("zyncoder %2d - %08d\t%08d\t%d\t%d\n", i, int_to_int(encoded), int_to_int(sum), up, down);
-#endif
-	zyncoder->last_encoded=encoded;
+	//Software Debouncing =>
+	//Get time interval from last tick
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	unsigned long int tsus=ts.tv_sec*1000000 + ts.tv_nsec/1000;
+	unsigned int dtus=tsus-zcdr->tsus;
+	//printf("ZYNCODER ISR %d => %u\n",i,dtus);
+	//Ignore spurious ticks
+	if (dtus<1000) {
+		#ifdef DEBUG
+		printf("zyncoder %d => Dropped Step (bouncing: %u)\n",i,dtus);
+		#endif
+		return;
+	}
+	//printf("ZYNCODER DEBOUNCED ISR %d => %u\n",i,dtus);
 
-	if (zyncoder->step==0) {
-		//Get time interval from last tick
-		struct timespec ts;
-		unsigned long int tsus;
-		clock_gettime(CLOCK_MONOTONIC, &ts);
-		tsus=ts.tv_sec*1000000 + ts.tv_nsec/1000;
-		unsigned int dtus=tsus-zyncoder->tsus;
-		//printf("ZYNCODER ISR %d => SUBVALUE=%d (%u)\n",i,zyncoder->subvalue,dtus);
-		//Ignore spurious ticks
-		if (dtus<1000) return;
-		//printf("ZYNCODER DEBOUNCED ISR %d => SUBVALUE=%d (%u)\n",i,zyncoder->subvalue,dtus);
+	//Calculate rotation direction => Quadrature Encoder Algorithm
+	int spin;
+	uint8_t encoded = (msb << 1) | lsb;
+	uint8_t sum = (zcdr->last_encoded << 2) | encoded;
+	zcdr->last_encoded = encoded;
+	switch(sum) {
+		case 0b1101:
+		case 0b0100:
+		case 0b0010:
+		case 0b1011:
+			spin = 1;
+			break;
+		case 0b1110:
+		case 0b0111:
+		case 0b0001:
+		case 0b1000:
+			spin = -1;
+			break;
+		default:
+			#ifdef DEBUG
+			printf("zyncoder %d => Dropped Step (invalid quadrature sequence: %08d)\n",i,int_to_int(sum));
+			#endif
+			return;
+	}
+	if (zcdr->inv) spin = -spin;
+	#ifdef DEBUG
+	printf("zyncoder %d - %08d\t%08d\t%d\n", i, int_to_int(encoded), int_to_int(sum), spin);
+	#endif
+
+	int32_t value;
+	//Adaptative Step Size
+	if (zcdr->step==0) {
+		//printf("ZYNCODER DEBOUNCED ISR %d => SUBVALUE=%d (%u)\n",i,zcdr->subvalue,dtus);
 		//Calculate average dtus for the last ZYNCODER_TICKS_PER_RETENT ticks
 		int j;
 		unsigned int dtus_avg=dtus;
-		for (j=0;j<ZYNCODER_TICKS_PER_RETENT;j++) dtus_avg+=zyncoder->dtus[j];
+		for (j=0;j<ZYNCODER_TICKS_PER_RETENT;j++) dtus_avg+=zcdr->dtus[j];
 		dtus_avg/=(ZYNCODER_TICKS_PER_RETENT+1);
 		//Add last dtus to fifo array
 		for (j=0;j<ZYNCODER_TICKS_PER_RETENT-1;j++)
-			zyncoder->dtus[j]=zyncoder->dtus[j+1];
-		zyncoder->dtus[j]=dtus;
+			zcdr->dtus[j]=zcdr->dtus[j+1];
+		zcdr->dtus[j]=dtus;
 		//Calculate step value
-		int dsval=10000*ZYNCODER_TICKS_PER_RETENT/dtus_avg;
+		int32_t dsval=10000*ZYNCODER_TICKS_PER_RETENT/dtus_avg;
 		if (dsval<1) dsval=1;
 		else if (dsval>2*ZYNCODER_TICKS_PER_RETENT) dsval=2*ZYNCODER_TICKS_PER_RETENT;
 
-		int value=-1;
-		if (up) {
-			if (zyncoder->max_value-zyncoder->subvalue>=dsval) zyncoder->subvalue=(zyncoder->subvalue+dsval);
-			else zyncoder->subvalue=zyncoder->max_value;
-			value=zyncoder->subvalue/ZYNCODER_TICKS_PER_RETENT;
+		int32_t sv;
+		if (spin>0) {
+			sv = zcdr->subvalue + dsval;
+			if (sv > zcdr->max_value) sv = zcdr->max_value;
 		}
-		else if (down) {
-			if (zyncoder->subvalue>=dsval) zyncoder->subvalue=(zyncoder->subvalue-dsval);
-			else zyncoder->subvalue=0;
-			value=(zyncoder->subvalue+ZYNCODER_TICKS_PER_RETENT-1)/ZYNCODER_TICKS_PER_RETENT;
+		else if (spin<0) {
+			sv = zcdr->subvalue - dsval;
+			if (sv < zcdr->min_value) sv = zcdr->min_value;
 		}
-
-		zyncoder->tsus=tsus;
-		if (value>=0 && zyncoder->value!=value) {
-			//printf("DTUS=%d, %d (%d)\n",dtus_avg,value,dsval);
-			zyncoder->value=value;
-			send_zyncoder(i);
-		}
-	} 
+		zcdr->subvalue = sv;
+		value = sv / ZYNCODER_TICKS_PER_RETENT;
+		zcdr->tsus=tsus;
+		//printf("DTUS=%d, %d (%d)\n",dtus_avg,value,dsval);
+	}
+	//Fixed Step Size
 	else {
-		unsigned int last_value=zyncoder->value;
-		if (zyncoder->value>zyncoder->max_value) zyncoder->value=zyncoder->max_value;
-		if (zyncoder->max_value-zyncoder->value>=zyncoder->step && up) zyncoder->value+=zyncoder->step;
-		else if (zyncoder->value>=zyncoder->step && down) zyncoder->value-=zyncoder->step;
-		if (last_value!=zyncoder->value) send_zyncoder(i);
+		if (spin>0) {
+			value = zcdr->value + zcdr->step;
+			if (value>zcdr->max_value) value=zcdr->max_value;
+		}
+		else if (spin<0) {
+			value = zcdr->value - zcdr->step;
+			if (value<zcdr->min_value) value=zcdr->min_value;
+		}
 	}
 
+	if (zcdr->value!=value) {
+		zcdr->value=value;
+		zcdr->value_flag = 1;
+		if (zcdr->zpot_i>=0) {
+			send_zynpot(zcdr->zpot_i);
+		}
+	}
 }
 
 #ifdef MCP23008_ENCODERS
@@ -683,7 +709,7 @@ void (*update_zyncoder_funcs[8])={
 
 //-----------------------------------------------------------------------------
 
-int setup_stepped_zyncoder(uint8_t i, uint16_t pin_a, uint16_t pin_b) {
+int setup_zyncoder(uint8_t i, uint16_t pin_a, uint16_t pin_b) {
 	if (i>=MAX_NUM_ZYNCODERS) {
 		printf("ZynCore->setup_zyncoder(%d, ...): Invalid index!\n", i);
 		return 0;
@@ -696,6 +722,8 @@ int setup_stepped_zyncoder(uint8_t i, uint16_t pin_a, uint16_t pin_b) {
 	zcdr->step = 1;
 	zcdr->value = 0;
 	zcdr->subvalue = 0;
+	zcdr->min_value = 0;
+	zcdr->max_value = 127;
 	zcdr->last_encoded = 0;
 	zcdr->tsus = 0;
 
@@ -767,73 +795,6 @@ int setup_stepped_zyncoder(uint8_t i, uint16_t pin_a, uint16_t pin_b) {
 		return 0;
 	}
 	return 0;
-}
-
-struct zyncoder_st *setup_zyncoder(uint8_t i, uint8_t pin_a, uint8_t pin_b, uint8_t midi_chan, uint8_t midi_ctrl, char *osc_path, unsigned int value, unsigned int max_value, unsigned int step) {
-	if (i > MAX_NUM_ZYNCODERS) {
-		printf("Zyncoder: Maximum number of zyncoders exceded: %d\n", MAX_NUM_ZYNCODERS);
-		return NULL;
-	}
-
-	struct zyncoder_st *zyncoder = zyncoders + i;
-
-	//Setup MIDI/OSC bindings
-	if (midi_chan>15) midi_chan=0;
-	if (midi_ctrl>127) midi_ctrl=1;
-	zyncoder->midi_chan = midi_chan;
-	zyncoder->midi_ctrl = midi_ctrl;
-
-	//printf("OSC PATH: %s\n",osc_path);
-	if (osc_path) {
-		char *osc_port_str=strtok(osc_path,":");
-		zyncoder->osc_port=atoi(osc_port_str);
-		if (zyncoder->osc_port>0) {
-			zyncoder->osc_lo_addr=lo_address_new(NULL,osc_port_str);
-			strcpy(zyncoder->osc_path,strtok(NULL,":"));
-		} else {
-			zyncoder->osc_path[0] = 0;
-		}
-	} else {
-		zyncoder->osc_path[0] = 0;
-	}
-
-	if (value>max_value) value=max_value;
-	zyncoder->step = step;
-	if (step>0) {
-		zyncoder->value = value;
-		zyncoder->subvalue = 0;
-		zyncoder->max_value = max_value;
-	} else {
-		zyncoder->value = value;
-		zyncoder->subvalue = ZYNCODER_TICKS_PER_RETENT*value;
-		zyncoder->max_value = ZYNCODER_TICKS_PER_RETENT*max_value;
-	}
-
-	if (zyncoder->enabled==0 || zyncoder->pin_a!=pin_a || zyncoder->pin_b!=pin_b) {
-		zyncoder->enabled = 1;
-		zyncoder->pin_a = pin_a;
-		zyncoder->pin_b = pin_b;
-		zyncoder->last_encoded = 0;
-		zyncoder->tsus = 0;
-
-		if (zyncoder->pin_a!=zyncoder->pin_b) {
-			pinMode(pin_a, INPUT);
-			pinMode(pin_b, INPUT);
-			pullUpDnControl(pin_a, PUD_UP);
-			pullUpDnControl(pin_b, PUD_UP);
-
-#if defined(MCP23017_ENCODERS) 
-			// this is a bit brute force, but update all the banks
-			zyncoder_mcp23017_bankA_ISR();
-			zyncoder_mcp23017_bankB_ISR();
-#elif defined(MCP23008_ENCODERS) 
-			wiringPiISR(pin_a,INT_EDGE_BOTH, update_zyncoder_funcs[i]);
-			wiringPiISR(pin_b,INT_EDGE_BOTH, update_zyncoder_funcs[i]);
-#endif
-		}
-	}
-
-	return zyncoder;
 }
 
 int setup_rangescale_zyncoder(uint8_t i, int32_t min_value, int32_t max_value, int32_t value, int32_t step) {

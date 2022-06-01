@@ -32,7 +32,6 @@
 
 #include "zyncoder.h"
 
-
 int main() {
 	int i;
 
