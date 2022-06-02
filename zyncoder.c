@@ -54,6 +54,29 @@ void (*zynswitch_rbpi_ISRs[]);
 void zyncoder_rbpi_ISR(uint8_t i);
 void (*zyncoder_rbpi_ISRs[]);
 
+int init_zynlib() {
+	init_zyncontrol();
+	if (!init_zynmidirouter()) return 0;
+	#ifdef ZYNAPTIK_CONFIG
+	if (!init_zynaptik()) return 0;
+	#endif
+	#ifdef ZYNTOF_CONFIG
+	if (!init_zyntof()) return 0;
+	#endif
+	return 1;
+}
+
+int end_zynlib() {
+	#ifdef ZYNTOF_CONFIG
+	if (!end_zyntof()) return 0;
+	#endif
+	#ifdef ZYNAPTIK_CONFIG
+	if (!end_zynaptik()) return 0;
+	#endif
+	if (!end_zynmidirouter()) return 0;
+	return 1;
+}
+
 //-----------------------------------------------------------------------------
 // Helper functions
 //-----------------------------------------------------------------------------
@@ -185,31 +208,17 @@ int setup_zynswitch(uint8_t i, uint16_t pin) {
 	return 1;
 }
 
-int setup_zynswitch_midi(uint8_t i, enum midi_event_type_enum midi_evt, uint8_t midi_chan, uint8_t midi_num, uint8_t midi_val) {
+int setup_zynswitch_midi(uint8_t i, uint8_t midi_evt, uint8_t midi_chan, uint8_t midi_num) {
 	if (i >= MAX_NUM_ZYNSWITCHES) {
-		printf("ZynCore->setup_zynswitch_midi(%d, ...): Invalid index!\n", i);
+		printf("Zyncoder: Maximum number of zynswitches exceeded: %d\n", MAX_NUM_ZYNSWITCHES);
 		return 0;
 	}
 
-	zynswitch_t *zsw = zynswitches + i;
-	zsw->midi_event.type = midi_evt;
-	zsw->midi_event.chan = midi_chan;
-	zsw->midi_event.num = midi_num;
-	zsw->midi_event.val = midi_val;
-	//printf("Zyncoder: Set Zynswitch %u MIDI %d: %u, %u, %u\n", i, midi_evt, midi_chan, midi_num, midi_val);
-
-	zsw->last_cvgate_note = -1;
-
-	#ifdef ZYNAPTIK_CONFIG
-	if (midi_evt==CVGATE_OUT_EVENT) {
-		pinMode(zsw->pin, OUTPUT);
-		setup_zynaptik_cvout(midi_num, midi_evt, midi_chan, i);
-	}
-	else if (midi_evt==GATE_OUT_EVENT) {
-		pinMode(zsw->pin, OUTPUT);
-		setup_zynaptik_gateout(i, midi_evt, midi_chan, midi_num);
-	}
-	#endif
+	struct zynswitch_st *zynswitch = zynswitches + i;
+	zynswitch->midi_event.type = midi_evt;
+	zynswitch->midi_event.chan = midi_chan;
+	zynswitch->midi_event.num = midi_num;
+	//printf("Zyncoder: Set Zynswitch %u MIDI %x: %u, %u\n", i, midi_evt, midi_chan, midi_num);
 
 	return 1;
 }
@@ -253,82 +262,41 @@ int get_next_pending_zynswitch(uint8_t i) {
 	return -1;
 }
 
-void send_zynswitch_midi(zynswitch_t *zsw, uint8_t status) {
-
-	if (zsw->midi_event.type==CTRL_CHANGE) {
-		uint8_t val;
-		if (status==0) val=zsw->midi_event.val;
-		else val=0;
+void send_zynswitch_midi(struct zynswitch_st *zynswitch, uint8_t status) {
+	if (zynswitch->midi_event.type==CTRL_CHANGE) {
+		uint8_t val=0;
+		if (status==0) val=127;
 		//Send MIDI event to engines and ouput (ZMOPS)
-		internal_send_ccontrol_change(zsw->midi_event.chan, zsw->midi_event.num, val);
+		internal_send_ccontrol_change(zynswitch->midi_event.chan, zynswitch->midi_event.num, val);
 		//Update zyncoders
-		midi_event_zynpot(zsw->midi_event.chan, zsw->midi_event.num, val);
+		midi_event_zyncoders(zynswitch->midi_event.chan, zynswitch->midi_event.num, val);
 		//Send MIDI event to UI
-		write_zynmidi_ccontrol_change(zsw->midi_event.chan, zsw->midi_event.num, val);
-		//printf("ZynCore: Zynswitch MIDI CC event (chan=%d, num=%d) => %d\n",zsw->midi_event.chan, zsw->midi_event.num, val);
+		write_zynmidi_ccontrol_change(zynswitch->midi_event.chan, zynswitch->midi_event.num, val);
+		//printf("Zyncoder: Zynswitch MIDI CC event (chan=%d, num=%d) => %d\n",zynswitch->midi_event.chan, zynswitch->midi_event.num, val);
 	}
-	else if (zsw->midi_event.type==CTRL_SWITCH_EVENT) {
-		if (status==0) {
-			uint8_t val;
-			uint8_t last_val = midi_filter.last_ctrl_val[zsw->midi_event.chan][zsw->midi_event.num];
-			if (last_val>=64) val = 0;
-			else val = 127;
-			//Send MIDI event to engines and ouput (ZMOPS)
-			internal_send_ccontrol_change(zsw->midi_event.chan, zsw->midi_event.num, val);
-			//Update zyncoders
-			midi_event_zynpot(zsw->midi_event.chan, zsw->midi_event.num, val);
-			//Send MIDI event to UI
-			write_zynmidi_ccontrol_change(zsw->midi_event.chan, zsw->midi_event.num, val);
-			//printf("ZynCore: Zynswitch MIDI CC-Switch event (chan=%d, num=%d) => %d\n",zsw->midi_event.chan, zsw->midi_event.num, val);
-		}
-	}
-	else if (zsw->midi_event.type==NOTE_ON) {
+	else if (zynswitch->midi_event.type==NOTE_ON) {
 		if (status==0) {
 			//Send MIDI event to engines and ouput (ZMOPS)
-			internal_send_note_on(zsw->midi_event.chan, zsw->midi_event.num, zsw->midi_event.val);
+			internal_send_note_on(zynswitch->midi_event.chan, zynswitch->midi_event.num, 127);
 			//Send MIDI event to UI
-			write_zynmidi_note_on(zsw->midi_event.chan, zsw->midi_event.num, zsw->midi_event.val);
-			//printf("ZynCore: Zynswitch MIDI Note-On event (chan=%d, num=%d) => %d\n",zsw->midi_event.chan, zsw->midi_event.num, zsw->midi_event.val);
+			write_zynmidi_note_on(zynswitch->midi_event.chan, zynswitch->midi_event.num, 127);
+			//printf("Zyncoder: Zynswitch MIDI Note-On event (chan=%d, num=%d) => %d\n",zynswitch->midi_event.chan, zynswitch->midi_event.num, 127);
 		}
 		else {
 			//Send MIDI event to engines and ouput (ZMOPS)
-			internal_send_note_off(zsw->midi_event.chan, zsw->midi_event.num, 0);
+			internal_send_note_off(zynswitch->midi_event.chan, zynswitch->midi_event.num, 0);
 			//Send MIDI event to UI
-			write_zynmidi_note_off(zsw->midi_event.chan, zsw->midi_event.num, 0);
-			//printf("ZynCore: Zynswitch MIDI Note-Off event (chan=%d, num=%d) => %d\n",zsw->midi_event.chan, zsw->midi_event.num, 0);
+			write_zynmidi_note_off(zynswitch->midi_event.chan, zynswitch->midi_event.num, 0);
+			//printf("Zyncoder: Zynswitch MIDI Note-Off event (chan=%d, num=%d) => %d\n",zynswitch->midi_event.chan, zynswitch->midi_event.num, 0);
 		}
 	}
-	#ifdef ZYNAPTIK_CONFIG
-	else if (zsw->midi_event.type==CVGATE_IN_EVENT && zsw->midi_event.num<4) {
-		if (status==0) {
-			pthread_mutex_lock(&zynaptik_cvin_lock);
-			int val=analogRead(ZYNAPTIK_ADS1115_BASE_PIN + zsw->midi_event.num);
-			pthread_mutex_unlock(&zynaptik_cvin_lock);
-			zsw->last_cvgate_note=(int)((k_cvin*6.144/(5.0*256.0))*val);
-			if (zsw->last_cvgate_note>127) zsw->last_cvgate_note=127;
-			else if (zsw->last_cvgate_note<0) zsw->last_cvgate_note=0;
-			//Send MIDI event to engines and ouput (ZMOPS)
-			internal_send_note_on(zsw->midi_event.chan, (uint8_t)zsw->last_cvgate_note, zsw->midi_event.val);
-			//Send MIDI event to UI
-			write_zynmidi_note_on(zsw->midi_event.chan, (uint8_t)zsw->last_cvgate_note, zsw->midi_event.val);
-			//printf("ZynCore: Zynswitch CV/Gate-IN event (chan=%d, raw=%d, num=%d) => %d\n",zsw->midi_event.chan, val, zsw->last_cvgate_note, zsw->midi_event.val);
-		}
-		else {
-			//Send MIDI event to engines and ouput (ZMOPS)
-			internal_send_note_off(zsw->midi_event.chan, zsw->last_cvgate_note, 0);
-			//Send MIDI event to UI
-			write_zynmidi_note_off(zsw->midi_event.chan, zsw->last_cvgate_note, 0);
-			//printf("ZynCore: Zynswitch CV/Gate event (chan=%d, num=%d) => %d\n",zsw->midi_event.chan, zsw->last_cvgate_note, 0);
-		}
-	}
-	#endif
-	else if (zsw->midi_event.type==PROG_CHANGE) {
+	else if (zynswitch->midi_event.type==PROG_CHANGE) {
 		if (status==0) {
 			//Send MIDI event to engines and ouput (ZMOPS)
-			internal_send_program_change(zsw->midi_event.chan, zsw->midi_event.num);
+			internal_send_program_change(zynswitch->midi_event.chan, zynswitch->midi_event.num);
 			//Send MIDI event to UI
-			write_zynmidi_program_change(zsw->midi_event.chan, zsw->midi_event.num);
-			//printf("ZynCore: Zynswitch MIDI Program Change event (chan=%d, num=%d)\n",zsw->midi_event.chan, zsw->midi_event.num);
+			write_zynmidi_program_change(zynswitch->midi_event.chan, zynswitch->midi_event.num);
+			//printf("Zyncoder: Zynswitch MIDI Program Change event (chan=%d, num=%d)\n",zynswitch->midi_event.chan, zynswitch->midi_event.num);
 		}
 	}
 }
@@ -456,6 +424,18 @@ void update_zyncoder(uint8_t i, uint8_t msb, uint8_t lsb) {
 		zcdr->value_flag = 1;
 		if (zcdr->zpot_i>=0) {
 			send_zynpot(zcdr->zpot_i);
+		}
+	}
+}
+
+void midi_event_zyncoders(uint8_t midi_chan, uint8_t midi_ctrl, uint8_t val) {
+	//Update zyncoder value => TODO Optimize this fragment!!!
+	int j;
+	for (j=0;j<MAX_NUM_ZYNCODERS;j++) {
+		if (zyncoders[j].enabled && zyncoders[j].midi_chan==midi_chan && zyncoders[j].midi_ctrl==midi_ctrl) {
+			zyncoders[j].value=val;
+			zyncoders[j].subvalue=val*ZYNCODER_TICKS_PER_RETENT;
+			//fprintf (stdout, "ZynMidiRouter: MIDI CC (%x, %x) => UI",midi_chan,midi_ctrl);
 		}
 	}
 }

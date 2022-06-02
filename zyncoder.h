@@ -51,17 +51,20 @@ typedef struct zynswitch_st {
 	unsigned int dtus;
 	uint8_t status;
 
-	midi_event_t midi_event;
+	struct midi_event_st midi_event;
 	int last_cvgate_note;
 } zynswitch_t;
 zynswitch_t zynswitches[MAX_NUM_ZYNSWITCHES];
+
+int init_zynlib();
+int end_zynlib();
 
 void reset_zynswitches();
 int get_num_zynswitches();
 int get_last_zynswitch_index();
 
 int setup_zynswitch(uint8_t i, uint16_t pin); 
-int setup_zynswitch_midi(uint8_t i, midi_event_type midi_evt, uint8_t midi_chan, uint8_t midi_num, uint8_t midi_val);
+int setup_zynswitch_midi(uint8_t i, uint8_t midi_evt, uint8_t midi_chan, uint8_t midi_num);
 
 unsigned int get_zynswitch(uint8_t i, unsigned int long_dtus);
 int get_next_pending_zynswitch(uint8_t i);
@@ -87,6 +90,8 @@ typedef struct zyncoder_st {
 	int32_t value;
 	uint8_t value_flag;
 	int8_t zpot_i;
+	uint8_t midi_chan;
+	uint8_t midi_ctrl;
 
 	// Next fields are zyncoder-specific
 	uint16_t pin_a;
