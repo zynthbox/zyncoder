@@ -33,9 +33,11 @@
 
 #include <wiringPi.h>
 #include <wiringPiI2C.h>
-#include <tof.h> // time of flight sensor library
+#include <tof.h>
 
+#include "zynpot.h"
 #include "zyncoder.h"
+#include "zyntof.h"
 
 //-----------------------------------------------------------------------------
 // TCA954X (43/44/48) Stuff => I2C Multiplexer
@@ -81,12 +83,12 @@ void setup_zyntof(uint8_t i, uint8_t midi_evt, uint8_t midi_chan, uint8_t midi_n
 		pthread_mutex_lock(&mutex);
 		select_zyntof_chan(i);
 		if (tofInit(1, VL53L0X_I2C_ADDRESS, VL53L0X_DISTANCE_MODE)!=1) {
-			printf("Zyncoder: Can't setup zyntof device VL53L0X-%d.\n", i);
+			printf("ZynTOF: Can't setup zyntof device VL53L0X-%d.\n", i);
 		} else {
 			zyntofs[i].enabled = 1;
 			int model, rev;
 			tofGetModel(&model, &rev);
-			printf("Zyncoder: Zyntof device VL53L0X-%d successfully opened (model %d, rev %d)\n", i, model, rev);
+			printf("ZynTOF: Device VL53L0X-%d successfully opened (model %d, rev %d)\n", i, model, rev);
 		}
 		pthread_mutex_unlock(&mutex);
 	}
@@ -119,7 +121,7 @@ void send_zyntof_midi(uint8_t i) {
 				//Send MIDI event to engines and ouput (ZMOPS)
 				internal_send_ccontrol_change(zyntofs[i].midi_chan, zyntofs[i].midi_num, mv);
 				//Update zyncoders
-				midi_event_zyncoders(zyntofs[i].midi_chan, zyntofs[i].midi_num, mv);
+				midi_event_zynpot(zyntofs[i].midi_chan, zyntofs[i].midi_num, mv);
 				//Send MIDI event to UI
 				write_zynmidi_ccontrol_change(zyntofs[i].midi_chan, zyntofs[i].midi_num, mv);
 			} else if (zyntofs[i].midi_evt==CHAN_PRESS) {
@@ -152,10 +154,10 @@ pthread_t init_poll_zyntofs() {
 	pthread_t tid;
 	int err=pthread_create(&tid, NULL, &poll_zyntofs, NULL);
 	if (err != 0) {
-		printf("Zyncoder: Can't create zyntof poll thread :[%s]", strerror(err));
+		printf("ZynTOF: Can't create poll thread :[%s]", strerror(err));
 		return 0;
 	} else {
-		printf("Zyncoder: Zyntof poll thread created successfully\n");
+		printf("ZynTOF: Poll thread created successfully\n");
 		return tid;
 	}
 }

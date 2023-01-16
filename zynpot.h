@@ -61,7 +61,7 @@ typedef struct zynpot_st {
 
 	// Function pointers
 	int (*setup_rangescale)(uint8_t, int32_t, int32_t, int32_t, int32_t);
-	unsigned int (*get_value)(uint8_t);
+	int32_t (*get_value)(uint8_t);
 	uint8_t (*get_value_flag)(uint8_t);
 	int (*set_value)(uint8_t, int32_t);
 } zynpot_t;
