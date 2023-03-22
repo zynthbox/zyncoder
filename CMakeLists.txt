@@ -4,6 +4,8 @@ project(zyncoder)
 include(CheckIncludeFiles)
 include(CheckLibraryExists)
 
+find_package(Python 3.5 REQUIRED COMPONENTS Interpreter)
+
 link_directories(/usr/local/lib)
 
 check_library_exists(wiringPi wiringPiSetup "" HAVE_WIRINGPI_LIB)
@@ -126,10 +128,17 @@ else()
 	#install(TARGETS wiringPiEmu LIBRARY DESTINATION lib)
 endif()
 
-# Temporarily disable test for Z2_V3
- add_executable(zyncoder_test zyncoder_test.c)
- target_link_libraries(zyncoder_test zyncoder)
- install(TARGETS zyncoder_test DESTINATION bin)
+add_executable(zyncoder_test zyncoder_test.c)
+target_link_libraries(zyncoder_test zyncoder)
+install(TARGETS zyncoder_test DESTINATION bin)
 
 install(TARGETS zyncoder LIBRARY DESTINATION lib)
 #install(TARGETS zynmidirouter LIBRARY DESTINATION lib)
+
+execute_process(
+  COMMAND "${Python_EXECUTABLE}" -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')"
+  OUTPUT_VARIABLE Python_VERSION
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+# Install zyncoder module to Python dist-packages
+install(FILES __init__.py zyncoder.py DESTINATION lib/python${Python_VERSION}/dist-packages/zyncoder)
