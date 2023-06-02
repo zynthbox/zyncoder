@@ -23,6 +23,9 @@
  * ******************************************************************
  */
 
+#define _GNU_SOURCE
+#include <pthread.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -949,6 +952,16 @@ int init_jack_midi(char *name) {
 		fprintf (stderr, "ZynMidiRouter: Error activating jack client.\n");
 		return 0;
 	}
+
+	// Set CPU affinity for the jack client to core 3 only
+	cpu_set_t cpuset;
+	CPU_ZERO(&cpuset);
+	// Our CPU set for the DSP is 0 (where the kernel also lives), 1, and 2. This leaves 4 for the UI application
+	CPU_SET(0, &cpuset);
+	CPU_SET(1, &cpuset);
+	CPU_SET(2, &cpuset);
+	const jack_native_thread_t threadID = jack_client_thread_id(jack_client);
+	int result = pthread_setaffinity_np(threadID, sizeof(cpuset), &cpuset);
 
 	return 1;
 }
