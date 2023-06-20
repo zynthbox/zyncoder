@@ -49,7 +49,7 @@ int init_zynmidirouter() {
 
 	if (!init_zynmidi_buffer()) return 0;
 	if (!init_midi_router()) return 0;
-	if (!init_jack_midi("ZynMidiRouter")) return 0; //ZynMidiRouter
+	// if (!init_jack_midi("ZynMidiRouter")) return 0; //ZynMidiRouter
 	return 1;
 }
 
