@@ -1296,7 +1296,7 @@ int jack_process_zmip(int iz, jack_nframes_t nframes) {
 
 		//Set zyncoder values
 		if (zmip->flags & FLAG_ZMIP_ZYNCODER  && event_type==CTRL_CHANGE && !midi_learning_mode) {
-			midi_event_zyncoders(event_chan, event_num, event_val);
+			// midi_event_zyncoders(event_chan, event_num, event_val);
 		}
 
 
@@ -1494,53 +1494,54 @@ int jack_process(jack_nframes_t nframes, void *arg) {
 uint8_t internal_midi_data[JACK_MIDI_BUFFER_SIZE];
 
 int write_internal_midi_event(uint8_t *event_buffer, int event_size) {
-	if (jack_ringbuffer_write_space(jack_ring_internal_buffer)>=event_size) {
-		if (jack_ringbuffer_write(jack_ring_internal_buffer, event_buffer, event_size)!=event_size) {
-			fprintf (stderr, "ZynMidiRouter: Error writing internal ring-buffer: INCOMPLETE\n");
-			return 0;
-		}
-	}
-	else {
-		fprintf (stderr, "ZynMidiRouter: Error writing internal ring-buffer: FULL\n");
-		return 0;
-	}
-
-	//Set last CC value
-	if (event_buffer[0] & (CTRL_CHANGE<<4)) {
-		uint8_t chan=event_buffer[0] & 0x0F;
-		uint8_t num=event_buffer[1];
-		uint8_t val=event_buffer[2];
-		midi_filter.last_ctrl_val[chan][num]=val;
-	}
-	//Set note state
-	else if (event_buffer[0] & (NOTE_ON<<4)) {
-		uint8_t chan=event_buffer[0] & 0x0F;
-		uint8_t num=event_buffer[1];
-		uint8_t val=event_buffer[2];
-		midi_filter.last_ctrl_val[chan][num]=val;
-	}
-	else if (event_buffer[0] & (NOTE_OFF<<4)) {
-		uint8_t chan=event_buffer[0] & 0x0F;
-		uint8_t num=event_buffer[1];
-		midi_filter.last_ctrl_val[chan][num]=0;
-	}
+	// if (jack_ringbuffer_write_space(jack_ring_internal_buffer)>=event_size) {
+	// 	if (jack_ringbuffer_write(jack_ring_internal_buffer, event_buffer, event_size)!=event_size) {
+	// 		fprintf (stderr, "ZynMidiRouter: Error writing internal ring-buffer: INCOMPLETE\n");
+	// 		return 0;
+	// 	}
+	// }
+	// else {
+	// 	fprintf (stderr, "ZynMidiRouter: Error writing internal ring-buffer: FULL\n");
+	// 	return 0;
+	// }
+ // 
+	// //Set last CC value
+	// if (event_buffer[0] & (CTRL_CHANGE<<4)) {
+	// 	uint8_t chan=event_buffer[0] & 0x0F;
+	// 	uint8_t num=event_buffer[1];
+	// 	uint8_t val=event_buffer[2];
+	// 	midi_filter.last_ctrl_val[chan][num]=val;
+	// }
+	// //Set note state
+	// else if (event_buffer[0] & (NOTE_ON<<4)) {
+	// 	uint8_t chan=event_buffer[0] & 0x0F;
+	// 	uint8_t num=event_buffer[1];
+	// 	uint8_t val=event_buffer[2];
+	// 	midi_filter.last_ctrl_val[chan][num]=val;
+	// }
+	// else if (event_buffer[0] & (NOTE_OFF<<4)) {
+	// 	uint8_t chan=event_buffer[0] & 0x0F;
+	// 	uint8_t num=event_buffer[1];
+	// 	midi_filter.last_ctrl_val[chan][num]=0;
+	// }
 
 	return 1;
 }
 
 //Get MIDI data from ringbuffer and forward to all ZMOPS via ZMIP_FAKE_INT
 int forward_internal_midi_data() {
-	int nb=jack_ringbuffer_read_space(jack_ring_internal_buffer);
-	if (jack_ringbuffer_read(jack_ring_internal_buffer, internal_midi_data, nb)!=nb) {
-		fprintf (stderr, "ZynMidiRouter: Error reading midi data from internal ring-buffer: %d bytes\n", nb);
-		return -1;
-	}
-	//TODO: Avoid buffer overflow => check that nb<=(JACK_MIDI_BUFFER_SIZE-n_data)
-	int j;
-	for (j=0;j<nb/3;j++) {
-		zmip_push_event_data(ZMIP_FAKE_INT,internal_midi_data+j*3);
-	}
-	return j;
+	// int nb=jack_ringbuffer_read_space(jack_ring_internal_buffer);
+	// if (jack_ringbuffer_read(jack_ring_internal_buffer, internal_midi_data, nb)!=nb) {
+	// 	fprintf (stderr, "ZynMidiRouter: Error reading midi data from internal ring-buffer: %d bytes\n", nb);
+	// 	return -1;
+	// }
+	// //TODO: Avoid buffer overflow => check that nb<=(JACK_MIDI_BUFFER_SIZE-n_data)
+	// int j;
+	// for (j=0;j<nb/3;j++) {
+	// 	zmip_push_event_data(ZMIP_FAKE_INT,internal_midi_data+j*3);
+	// }
+	// return j;
+    return 0;
 }
 
 //------------------------------
